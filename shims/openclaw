@@ -1,0 +1,3 @@
+#!/bin/sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/node_modules/@qingchencloud/openclaw-zh/openclaw.mjs" "$@"

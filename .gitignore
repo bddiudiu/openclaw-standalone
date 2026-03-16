@@ -1,0 +1,26 @@
+# Build output
+build/
+dist/
+output/
+*.zip
+*.tar.gz
+*.exe
+*.msi
+*.dmg
+*.pkg
+*.deb
+*.AppImage
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

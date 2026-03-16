@@ -1,0 +1,370 @@
+name: Build OpenClaw Standalone
+
+on:
+  # Manual trigger with version input
+  workflow_dispatch:
+    inputs:
+      openclaw_version:
+        description: 'OpenClaw version to package (leave empty for latest)'
+        required: false
+        default: ''
+      upload_r2:
+        description: 'Upload to Cloudflare R2'
+        required: false
+        type: boolean
+        default: true
+  # Auto-trigger on tag push
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '22'
+  OPENCLAW_PKG: '@qingchencloud/openclaw-zh'
+  NPM_REGISTRY: 'https://registry.npmmirror.com'
+
+jobs:
+  # --- Resolve version ---
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      pkg_spec: ${{ steps.version.outputs.pkg_spec }}
+    steps:
+      - name: Resolve OpenClaw version
+        id: version
+        run: |
+          INPUT_VER="${{ github.event.inputs.openclaw_version }}"
+          if [ -n "$INPUT_VER" ]; then
+            echo "version=$INPUT_VER" >> $GITHUB_OUTPUT
+            echo "pkg_spec=${{ env.OPENCLAW_PKG }}@$INPUT_VER" >> $GITHUB_OUTPUT
+          else
+            # Get latest version from npm
+            VER=$(npm view "${{ env.OPENCLAW_PKG }}" version --registry "${{ env.NPM_REGISTRY }}" 2>/dev/null || echo "")
+            if [ -z "$VER" ]; then
+              echo "Failed to resolve latest version"
+              exit 1
+            fi
+            echo "version=$VER" >> $GITHUB_OUTPUT
+            echo "pkg_spec=${{ env.OPENCLAW_PKG }}@$VER" >> $GITHUB_OUTPUT
+          fi
+          echo "Resolved version: $(cat $GITHUB_OUTPUT | grep version= | head -1)"
+
+  # --- Build matrix ---
+  build:
+    needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win-x64
+            archive_ext: zip
+          - os: macos-13
+            platform: mac-x64
+            archive_ext: tar.gz
+          - os: macos-14
+            platform: mac-arm64
+            archive_ext: tar.gz
+          - os: ubuntu-latest
+            platform: linux-x64
+            archive_ext: tar.gz
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            archive_ext: tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Show environment
+        run: |
+          node --version
+          npm --version
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Version: ${{ needs.resolve-version.outputs.version }}"
+
+      # ===== Build =====
+      - name: Create build directory
+        shell: bash
+        run: mkdir -p build/${{ matrix.platform }}
+
+      - name: Install OpenClaw
+        shell: bash
+        working-directory: build/${{ matrix.platform }}
+        run: |
+          echo '{ "name": "openclaw-standalone-build", "private": true }' > package.json
+          npm install "${{ needs.resolve-version.outputs.pkg_spec }}" \
+            --registry "${{ env.NPM_REGISTRY }}" \
+            --include=optional
+          rm -f package.json package-lock.json
+
+      - name: Copy Node.js binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp "$(which node)" "build/${{ matrix.platform }}/node"
+          chmod +x "build/${{ matrix.platform }}/node"
+
+      - name: Copy Node.js binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item (Get-Command node).Source "build/${{ matrix.platform }}/node.exe"
+
+      - name: Copy shim (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp shims/openclaw "build/${{ matrix.platform }}/openclaw"
+          chmod +x "build/${{ matrix.platform }}/openclaw"
+
+      - name: Copy shim (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item "shims/openclaw.cmd" "build/${{ matrix.platform }}/openclaw.cmd"
+
+      - name: Write VERSION file
+        shell: bash
+        run: |
+          cat > "build/${{ matrix.platform }}/VERSION" <<EOF
+          openclaw_version=${{ needs.resolve-version.outputs.version }}
+          node_version=$(node --version)
+          platform=${{ matrix.platform }}
+          build_date=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          EOF
+
+      # ===== Cleanup to reduce size =====
+      - name: Cleanup unnecessary files (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          echo "Before: $(du -sm build/${{ matrix.platform }}/node_modules | cut -f1)MB"
+          find "build/${{ matrix.platform }}/node_modules" -type f \( \
+            -name "*.ts" ! -name "*.d.ts" -o \
+            -name "*.map" -o \
+            -name "CHANGELOG*" -o \
+            -name "HISTORY*" -o \
+            -name "AUTHORS*" -o \
+            -name ".npmignore" -o \
+            -name ".eslintrc*" -o \
+            -name ".prettierrc*" -o \
+            -name "Makefile" -o \
+            -name ".editorconfig" -o \
+            -name ".travis.yml" \
+          \) -delete 2>/dev/null || true
+          find "build/${{ matrix.platform }}/node_modules" -type d \( \
+            -name "test" -o -name "tests" -o -name "__tests__" -o \
+            -name "spec" -o -name "example" -o -name "examples" -o \
+            -name ".github" -o -name ".circleci" \
+          \) -exec rm -rf {} + 2>/dev/null || true
+          echo "After: $(du -sm build/${{ matrix.platform }}/node_modules | cut -f1)MB"
+
+      - name: Cleanup unnecessary files (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nmDir = "build/${{ matrix.platform }}/node_modules"
+          $patterns = @("*.ts", "*.map", "CHANGELOG*", "HISTORY*", "AUTHORS*",
+                        ".npmignore", ".eslintrc*", ".prettierrc*", "Makefile",
+                        ".editorconfig", ".travis.yml")
+          $dirPatterns = @("test", "tests", "__tests__", "spec", "example", "examples", ".github", ".circleci")
+          foreach ($p in $patterns) {
+            Get-ChildItem -Path $nmDir -Recurse -Filter $p -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notlike "*.d.ts" } |
+              Remove-Item -Force -ErrorAction SilentlyContinue
+          }
+          foreach ($d in $dirPatterns) {
+            Get-ChildItem -Path $nmDir -Recurse -Directory -Filter $d -ErrorAction SilentlyContinue |
+              Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      # ===== Package =====
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p output
+          mv "build/${{ matrix.platform }}" "build/openclaw"
+          tar -czf "output/openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz" \
+            -C build openclaw
+          mv "build/openclaw" "build/${{ matrix.platform }}"
+          # Generate checksum
+          cd output
+          shasum -a 256 *.tar.gz > "openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256" 2>/dev/null || \
+          sha256sum *.tar.gz > "openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256" 2>/dev/null || true
+          ls -lh
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output | Out-Null
+          $version = "${{ needs.resolve-version.outputs.version }}"
+          $zipName = "openclaw-$version-win-x64.zip"
+          Rename-Item "build/${{ matrix.platform }}" "openclaw"
+          Compress-Archive -Path "build/openclaw" -DestinationPath "output/$zipName" -CompressionLevel Optimal
+          Rename-Item "build/openclaw" "${{ matrix.platform }}"
+          # Generate checksum
+          $hash = (Get-FileHash "output/$zipName" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zipName" | Set-Content "output/$zipName.sha256"
+          Get-ChildItem output
+
+      # ===== Inno Setup installer (Windows only) =====
+      - name: Build Inno Setup installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ needs.resolve-version.outputs.version }}"
+          $sourceDir = "${{ github.workspace }}\build\${{ matrix.platform }}"
+          $outputDir = "${{ github.workspace }}\output"
+          # Inno Setup is pre-installed on windows-latest
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=$version" `
+            "/DSourceDir=$sourceDir" `
+            "/DOutputDir=$outputDir" `
+            "installer\setup.iss"
+
+      # ===== Upload artifacts =====
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-${{ matrix.platform }}
+          path: output/*
+          retention-days: 30
+
+  # --- Create Release ---
+  release:
+    needs: [resolve-version, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Collect all files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.sha256" \) \
+            -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Generate latest.json manifest
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.version }}"
+          cat > release/latest.json <<EOF
+          {
+            "version": "$VERSION",
+            "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "downloads": {
+              "win-x64": {
+                "zip": "openclaw-$VERSION-win-x64.zip",
+                "installer": "openclaw-$VERSION-win-x64-setup.exe"
+              },
+              "mac-x64": {
+                "archive": "openclaw-$VERSION-mac-x64.tar.gz"
+              },
+              "mac-arm64": {
+                "archive": "openclaw-$VERSION-mac-arm64.tar.gz"
+              },
+              "linux-x64": {
+                "archive": "openclaw-$VERSION-linux-x64.tar.gz"
+              },
+              "linux-arm64": {
+                "archive": "openclaw-$VERSION-linux-arm64.tar.gz"
+              }
+            }
+          }
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.resolve-version.outputs.version }}
+          name: OpenClaw ${{ needs.resolve-version.outputs.version }}
+          body: |
+            ## OpenClaw ${{ needs.resolve-version.outputs.version }} 独立安装包
+
+            **零依赖安装** — 无需 Node.js，无需 npm，下载即用！
+
+            ### 📥 下载
+
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | Windows x64 | `*-win-x64-setup.exe` | **推荐** 引导式安装 |
+            | Windows x64 | `*-win-x64.zip` | 绿色免安装版 |
+            | macOS x64 (Intel) | `*-mac-x64.tar.gz` | 解压即用 |
+            | macOS ARM (Apple Silicon) | `*-mac-arm64.tar.gz` | 解压即用 |
+            | Linux x64 | `*-linux-x64.tar.gz` | 解压即用 |
+            | Linux ARM64 (树莓派等) | `*-linux-arm64.tar.gz` | 解压即用 |
+
+            ### 🚀 安装方法
+
+            **Windows**: 下载 `.exe` 安装包，双击运行安装向导
+
+            **macOS / Linux**:
+            ```bash
+            curl -fsSL https://dl.qrj.ai/openclaw/install.sh | bash
+            ```
+
+            或手动: 下载对应平台的 `.tar.gz` → 解压 → 将目录加入 PATH
+
+            ---
+            由 [晴辰云](https://gpt.qt.cool) 构建 · [ClawPanel 图形管理面板](https://github.com/qingchencloud/clawpanel)
+          files: release/*
+          draft: false
+          prerelease: false
+
+  # --- Upload to R2 ---
+  upload-r2:
+    needs: [resolve-version, build, release]
+    runs-on: ubuntu-latest
+    if: >-
+      (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.upload_r2 == 'true')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Collect files
+        run: |
+          mkdir -p upload
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.sha256" \) \
+            -exec cp {} upload/ \;
+
+      - name: Upload to Cloudflare R2
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: |
+            r2 object put clawpanel-releases/openclaw-standalone/${{ needs.resolve-version.outputs.version }}/ \
+              --file upload/ --recursive
+
+      - name: Upload latest.json
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: |
+            VERSION="${{ needs.resolve-version.outputs.version }}"
+            echo '{
+              "version": "'$VERSION'",
+              "date": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+              "base_url": "https://dl.qrj.ai/openclaw-standalone/'$VERSION'"
+            }' > /tmp/latest.json
+            r2 object put clawpanel-releases/openclaw-standalone/latest.json \
+              --file /tmp/latest.json --content-type application/json
