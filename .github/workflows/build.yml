@@ -357,7 +357,7 @@ jobs:
           for file in upload/*; do
             FILENAME=$(basename "$file")
             echo "Uploading $FILENAME ..."
-            wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file"
+            wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file" --remote
           done
           echo "All files uploaded to R2: ${PREFIX}/"
 
@@ -375,5 +375,5 @@ jobs:
           }
           EOF
           wrangler r2 object put "clawpanel-releases/openclaw-standalone/latest.json" \
-            --file /tmp/latest.json --content-type application/json
+            --file /tmp/latest.json --content-type application/json --remote
           echo "latest.json updated to version $VERSION"
