@@ -9,6 +9,24 @@ OPENCLAW_PKG="${OPENCLAW_PKG:-@qingchencloud/openclaw-zh}"
 OUTPUT_DIR="${OUTPUT_DIR:-output}"
 SCRIPT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+test_changelog_exports() {
+    local build_root="$1"
+    local interactive_mode="$build_root/node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/interactive-mode.js"
+    local changelog_file="$build_root/node_modules/@mariozechner/pi-coding-agent/dist/utils/changelog.js"
+
+    [ -f "$interactive_mode" ] || { echo "ERROR: Missing interactive-mode.js: $interactive_mode"; exit 1; }
+    [ -f "$changelog_file" ] || { echo "ERROR: Missing changelog.js: $changelog_file"; exit 1; }
+
+    if grep -Eq 'getChangelogPath|getNewEntries|parseChangelog' "$interactive_mode"; then
+        for export_name in getChangelogPath getNewEntries parseChangelog; do
+            if ! grep -Eq "export[[:space:]]+function[[:space:]]+${export_name}\\b" "$changelog_file"; then
+                echo "ERROR: changelog.js missing export: $export_name"
+                exit 1
+            fi
+        done
+    fi
+}
+
 cd "$SCRIPT_ROOT"
 
 # --- Detect platform ---
@@ -74,8 +92,13 @@ CHANGELOG_STUB="$BUILD_DIR/node_modules/@mariozechner/pi-coding-agent/dist/utils
 if [ ! -f "$CHANGELOG_STUB" ]; then
     echo "Patching: creating missing changelog.js stub"
     mkdir -p "$(dirname "$CHANGELOG_STUB")"
-    echo 'export function getChangelog() { return "No changelog available." }' > "$CHANGELOG_STUB"
+    cat > "$CHANGELOG_STUB" <<'EOF'
+export function getChangelogPath() { return null }
+export function parseChangelog() { return [] }
+export function getNewEntries() { return [] }
+EOF
 fi
+test_changelog_exports "$BUILD_DIR"
 
 # --- 4. Copy Node.js binary ---
 echo ""
@@ -148,6 +171,7 @@ echo "Cleaned: ${BEFORE_SIZE}MB -> ${AFTER_SIZE}MB (saved $((BEFORE_SIZE - AFTER
 
 # Remove build package.json
 rm -f "$BUILD_DIR/package.json" "$BUILD_DIR/package-lock.json"
+test_changelog_exports "$BUILD_DIR"
 
 # --- 8. Create tar.gz archive ---
 echo ""

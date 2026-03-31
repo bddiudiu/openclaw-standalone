@@ -14,6 +14,30 @@ $ErrorActionPreference = "Stop"
 $SCRIPT_ROOT = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $SCRIPT_ROOT
 
+function Test-ChangelogExports {
+    param([string]$BuildRoot)
+
+    $interactiveMode = Join-Path $BuildRoot 'node_modules\@mariozechner\pi-coding-agent\dist\modes\interactive\interactive-mode.js'
+    $changelogFile = Join-Path $BuildRoot 'node_modules\@mariozechner\pi-coding-agent\dist\utils\changelog.js'
+
+    if (-not (Test-Path $interactiveMode)) {
+        throw "Missing interactive-mode.js: $interactiveMode"
+    }
+    if (-not (Test-Path $changelogFile)) {
+        throw "Missing changelog.js: $changelogFile"
+    }
+
+    $interactiveContent = Get-Content $interactiveMode -Raw
+    if ($interactiveContent -match 'getChangelogPath|getNewEntries|parseChangelog') {
+        $changelogContent = Get-Content $changelogFile -Raw
+        foreach ($exportName in @('getChangelogPath', 'getNewEntries', 'parseChangelog')) {
+            if ($changelogContent -notmatch ("export\\s+function\\s+" + [regex]::Escape($exportName) + "\\b")) {
+                throw "changelog.js missing export: $exportName"
+            }
+        }
+    }
+}
+
 # --- 1. Validate Node.js ---
 Write-Host "=== Step 1: Validating Node.js ===" -ForegroundColor Cyan
 $nodeVersion = & node --version 2>$null
@@ -57,8 +81,13 @@ if (-not (Test-Path $changelogStub)) {
     Write-Host "Patching: creating missing changelog.js stub" -ForegroundColor Yellow
     $stubDir = Split-Path $changelogStub
     if (-not (Test-Path $stubDir)) { New-Item -ItemType Directory -Force -Path $stubDir | Out-Null }
-    'export function getChangelog() { return "No changelog available." }' | Set-Content -Path $changelogStub -Encoding UTF8
+    @'
+export function getChangelogPath() { return null }
+export function parseChangelog() { return [] }
+export function getNewEntries() { return [] }
+'@ | Set-Content -Path $changelogStub -Encoding UTF8
 }
+Test-ChangelogExports $BuildDir
 
 # --- 4. Copy Node.js binary ---
 Write-Host "`n=== Step 4: Copying Node.js runtime ===" -ForegroundColor Cyan
@@ -113,6 +142,7 @@ Write-Host ("Cleaned up ~{0:N1} MB of unnecessary files" -f $savedMB)
 # Remove build package.json (not needed in final package)
 Remove-Item "$BuildDir\package.json" -Force -ErrorAction SilentlyContinue
 Remove-Item "$BuildDir\package-lock.json" -Force -ErrorAction SilentlyContinue
+Test-ChangelogExports $BuildDir
 
 # --- 8. Create zip archive ---
 Write-Host "`n=== Step 8: Creating zip archive ===" -ForegroundColor Cyan
