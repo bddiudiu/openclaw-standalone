@@ -15,6 +15,8 @@ on:
         default: true
   # Auto-trigger on tag push
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
