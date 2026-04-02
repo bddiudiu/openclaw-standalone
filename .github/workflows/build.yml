@@ -355,32 +355,29 @@ jobs:
             -exec cp {} upload/ \;
           ls -lh upload/
 
-      - name: Setup Node.js for wrangler
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
-      - name: Upload files to R2
+      - name: Upload files to R2 via S3 API
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           VERSION="${{ needs.resolve-version.outputs.version }}"
           PREFIX="openclaw-standalone/${VERSION}"
           for file in upload/*; do
             FILENAME=$(basename "$file")
-            echo "Uploading $FILENAME ..."
-            wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file" --remote
+            echo "Uploading $FILENAME ($(du -h "$file" | cut -f1)) ..."
+            aws s3 cp "$file" "s3://clawpanel-releases/${PREFIX}/${FILENAME}" \
+              --endpoint-url "$R2_ENDPOINT"
           done
           echo "All files uploaded to R2: ${PREFIX}/"
 
       - name: Upload latest.json to R2
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           VERSION="${{ needs.resolve-version.outputs.version }}"
           cat > /tmp/latest.json <<EOF
@@ -390,6 +387,6 @@ jobs:
             "base_url": "https://dl.qrj.ai/openclaw-standalone/$VERSION"
           }
           EOF
-          wrangler r2 object put "clawpanel-releases/openclaw-standalone/latest.json" \
-            --file /tmp/latest.json --content-type application/json --remote
+          aws s3 cp /tmp/latest.json "s3://clawpanel-releases/openclaw-standalone/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" --content-type application/json
           echo "latest.json updated to version $VERSION"
