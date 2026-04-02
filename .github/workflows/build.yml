@@ -355,6 +355,14 @@ jobs:
             -exec cp {} upload/ \;
           ls -lh upload/
 
+      - name: Setup Node.js for wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
       - name: Upload files to R2
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -362,19 +370,23 @@ jobs:
         run: |
           VERSION="${{ needs.resolve-version.outputs.version }}"
           PREFIX="openclaw-standalone/${VERSION}"
-          R2_API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/clawpanel-releases/objects"
+          FAILED=0
           for file in upload/*; do
             FILENAME=$(basename "$file")
-            SIZE=$(du -h "$file" | cut -f1)
-            echo "Uploading $FILENAME ($SIZE) ..."
-            curl --fail --silent --show-error \
-              -X PUT "${R2_API}/${PREFIX}/${FILENAME}" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$file"
-            echo " ✓ $FILENAME uploaded"
+            SIZE_MB=$(( $(stat --format=%s "$file") / 1048576 ))
+            echo "Uploading $FILENAME (${SIZE_MB}MB) ..."
+            if [ "$SIZE_MB" -gt 290 ]; then
+              echo "⚠ Skipping $FILENAME (${SIZE_MB}MB > 290MB wrangler limit, available in GitHub Release)"
+              continue
+            fi
+            if wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file" --remote; then
+              echo "✓ $FILENAME uploaded"
+            else
+              echo "⚠ Failed to upload $FILENAME, continuing..."
+              FAILED=$((FAILED + 1))
+            fi
           done
-          echo "All files uploaded to R2: ${PREFIX}/"
+          echo "Upload complete (skipped/failed: $FAILED)"
 
       - name: Upload latest.json to R2
         env:
@@ -382,7 +394,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           VERSION="${{ needs.resolve-version.outputs.version }}"
-          R2_API="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/clawpanel-releases/objects"
           cat > /tmp/latest.json <<EOF
           {
             "version": "$VERSION",
@@ -390,9 +401,6 @@ jobs:
             "base_url": "https://dl.qrj.ai/openclaw-standalone/$VERSION"
           }
           EOF
-          curl --fail --silent --show-error \
-            -X PUT "${R2_API}/openclaw-standalone/latest.json" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data-binary @/tmp/latest.json
+          wrangler r2 object put "clawpanel-releases/openclaw-standalone/latest.json" \
+            --file /tmp/latest.json --content-type application/json --remote
           echo "latest.json updated to version $VERSION"
