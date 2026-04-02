@@ -190,10 +190,10 @@ jobs:
             Get-ChildItem -Path $nmDir -Recurse -Directory -Filter $d -ErrorAction SilentlyContinue |
               Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           }
-          # Remove nested node_modules inside extensions (discord-api-types etc. cause MAX_PATH overflow in Inno Setup)
-          $extPath = "$nmDir\@qingchencloud\openclaw-zh\dist\extensions"
-          if (Test-Path $extPath) {
-            Get-ChildItem -Path $extPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue |
+          # Remove ALL nested node_modules inside openclaw-zh package tree (deeply nested deps like @jimp/plugin-print/zod cause MAX_PATH overflow in Inno Setup)
+          $zhPath = "$nmDir\@qingchencloud\openclaw-zh"
+          if (Test-Path $zhPath) {
+            Get-ChildItem -Path $zhPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue |
               Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           }
 
