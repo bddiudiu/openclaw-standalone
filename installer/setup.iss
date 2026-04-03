@@ -14,6 +14,10 @@
   #define OutputDir "..\output"
 #endif
 
+#ifndef AppPrefix
+  #define AppPrefix "openclaw"
+#endif
+
 [Setup]
 AppId={{A7E3F2B1-9C4D-4E5F-B6A8-1D2E3F4A5B6C}
 AppName=OpenClaw
@@ -28,7 +32,7 @@ DefaultGroupName=OpenClaw
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
 OutputDir={#OutputDir}
-OutputBaseFilename=openclaw-{#AppVersion}-win-x64-setup
+OutputBaseFilename={#AppPrefix}-{#AppVersion}-win-x64-setup
 SetupIconFile=..\assets\openclaw.ico
 Compression=lzma2/ultra64
 SolidCompression=yes

@@ -1,23 +1,25 @@
 name: Build OpenClaw Standalone
 
 on:
-  # Manual trigger with version input
   workflow_dispatch:
     inputs:
+      edition:
+        description: 'Edition (zh=汉化版, en=官方原版, both=两个都构建)'
+        type: choice
+        options:
+          - both
+          - zh
+          - en
+        default: 'both'
       openclaw_version:
         description: 'OpenClaw version to package (leave empty for latest)'
         required: false
         default: ''
-      openclaw_pkg:
-        description: 'NPM package name (openclaw or @qingchencloud/openclaw-zh)'
-        required: false
-        default: '@qingchencloud/openclaw-zh'
       upload_r2:
         description: 'Upload to Cloudflare R2'
         required: false
         type: boolean
         default: true
-  # Auto-trigger on tag push
   push:
     branches:
       - main
@@ -26,42 +28,50 @@ on:
 
 env:
   NODE_VERSION: '22'
-  OPENCLAW_PKG: ${{ github.event.inputs.openclaw_pkg || '@qingchencloud/openclaw-zh' }}
   NPM_REGISTRY: 'https://registry.npmmirror.com'
 
 jobs:
-  # --- Resolve version ---
+  # --- Resolve versions for both editions ---
   resolve-version:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      pkg_spec: ${{ steps.version.outputs.pkg_spec }}
+      version_zh: ${{ steps.ver.outputs.version_zh }}
+      version_en: ${{ steps.ver.outputs.version_en }}
     steps:
-      - name: Resolve OpenClaw version
-        id: version
+      - name: Resolve OpenClaw versions
+        id: ver
         run: |
           INPUT_VER="${{ github.event.inputs.openclaw_version }}"
-          if [ -n "$INPUT_VER" ]; then
-            echo "version=$INPUT_VER" >> $GITHUB_OUTPUT
-            echo "pkg_spec=${{ env.OPENCLAW_PKG }}@$INPUT_VER" >> $GITHUB_OUTPUT
-          else
-            # Get latest version from npm
-            VER=$(npm view "${{ env.OPENCLAW_PKG }}" version --registry "${{ env.NPM_REGISTRY }}" 2>/dev/null || echo "")
-            if [ -z "$VER" ]; then
-              echo "Failed to resolve latest version"
-              exit 1
-            fi
-            echo "version=$VER" >> $GITHUB_OUTPUT
-            echo "pkg_spec=${{ env.OPENCLAW_PKG }}@$VER" >> $GITHUB_OUTPUT
-          fi
-          echo "Resolved version: $(cat $GITHUB_OUTPUT | grep version= | head -1)"
+          REGISTRY="${{ env.NPM_REGISTRY }}"
 
-  # --- Build matrix ---
+          # Chinese edition
+          if [ -n "$INPUT_VER" ]; then
+            echo "version_zh=$INPUT_VER" >> $GITHUB_OUTPUT
+          else
+            VER=$(npm view "@qingchencloud/openclaw-zh" version --registry "$REGISTRY" 2>/dev/null || \
+                  npm view "@qingchencloud/openclaw-zh" version 2>/dev/null || echo "unknown")
+            echo "version_zh=$VER" >> $GITHUB_OUTPUT
+          fi
+
+          # Official edition
+          if [ -n "$INPUT_VER" ]; then
+            echo "version_en=$INPUT_VER" >> $GITHUB_OUTPUT
+          else
+            VER=$(npm view "openclaw" version --registry "$REGISTRY" 2>/dev/null || \
+                  npm view "openclaw" version 2>/dev/null || echo "unknown")
+            echo "version_en=$VER" >> $GITHUB_OUTPUT
+          fi
+
+          cat $GITHUB_OUTPUT
+
+  # --- Build matrix: 2 editions × 4 platforms = 8 parallel builds ---
   build:
     needs: resolve-version
     strategy:
       fail-fast: false
       matrix:
+        edition: [zh, en]
+        os: [windows-latest, macos-15, ubuntu-latest, ubuntu-24.04-arm]
         include:
           - os: windows-latest
             platform: win-x64
@@ -75,8 +85,22 @@ jobs:
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             archive_ext: tar.gz
+          - edition: zh
+            pkg: '@qingchencloud/openclaw-zh'
+          - edition: en
+            pkg: 'openclaw'
+
+    # Skip builds when user selects a specific edition via workflow_dispatch
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.edition == 'both' ||
+      github.event.inputs.edition == matrix.edition
 
     runs-on: ${{ matrix.os }}
+
+    env:
+      PKG_VERSION: ${{ matrix.edition == 'zh' && needs.resolve-version.outputs.version_zh || needs.resolve-version.outputs.version_en }}
+      ARCHIVE_PREFIX: ${{ matrix.edition == 'zh' && 'openclaw-zh' || 'openclaw' }}
 
     steps:
       - name: Checkout
@@ -91,8 +115,9 @@ jobs:
         run: |
           node --version
           npm --version
+          echo "Edition: ${{ matrix.edition }} (${{ matrix.pkg }})"
           echo "Platform: ${{ matrix.platform }}"
-          echo "Version: ${{ needs.resolve-version.outputs.version }}"
+          echo "Version: ${{ env.PKG_VERSION }}"
 
       # ===== Build =====
       - name: Enable Windows Long Paths
@@ -112,7 +137,10 @@ jobs:
         working-directory: build/${{ matrix.platform }}
         run: |
           echo '{ "name": "openclaw-standalone-build", "private": true }' > package.json
-          npm install "${{ needs.resolve-version.outputs.pkg_spec }}" \
+          PKG_SPEC="${{ matrix.pkg }}"
+          [ "${{ env.PKG_VERSION }}" != "unknown" ] && [ -n "${{ env.PKG_VERSION }}" ] && PKG_SPEC="${{ matrix.pkg }}@${{ env.PKG_VERSION }}"
+          echo "Installing: $PKG_SPEC"
+          npm install "$PKG_SPEC" \
             --registry "${{ env.NPM_REGISTRY }}" \
             --include=optional
           rm -f package.json package-lock.json
@@ -145,7 +173,9 @@ jobs:
         shell: bash
         run: |
           cat > "build/${{ matrix.platform }}/VERSION" <<EOF
-          openclaw_version=${{ needs.resolve-version.outputs.version }}
+          openclaw_version=${{ env.PKG_VERSION }}
+          edition=${{ matrix.edition }}
+          package=${{ matrix.pkg }}
           node_version=$(node --version)
           platform=${{ matrix.platform }}
           build_date=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
@@ -236,13 +266,13 @@ jobs:
         run: |
           mkdir -p output
           mv "build/${{ matrix.platform }}" "build/openclaw"
-          tar -czf "output/openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz" \
-            -C build openclaw
+          ARCHIVE="${{ env.ARCHIVE_PREFIX }}-${{ env.PKG_VERSION }}-${{ matrix.platform }}.tar.gz"
+          tar -czf "output/$ARCHIVE" -C build openclaw
           mv "build/openclaw" "build/${{ matrix.platform }}"
           # Generate checksum
           cd output
-          shasum -a 256 *.tar.gz > "openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256" 2>/dev/null || \
-          sha256sum *.tar.gz > "openclaw-${{ needs.resolve-version.outputs.version }}-${{ matrix.platform }}.tar.gz.sha256" 2>/dev/null || true
+          shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || \
+          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || true
           ls -lh
 
       - name: Create archive (Windows)
@@ -250,8 +280,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path output | Out-Null
-          $version = "${{ needs.resolve-version.outputs.version }}"
-          $zipName = "openclaw-$version-win-x64.zip"
+          $zipName = "${{ env.ARCHIVE_PREFIX }}-${{ env.PKG_VERSION }}-win-x64.zip"
           Rename-Item "build/${{ matrix.platform }}" "openclaw"
           Compress-Archive -Path "build/openclaw" -DestinationPath "output/$zipName" -CompressionLevel Optimal
           Rename-Item "build/openclaw" "${{ matrix.platform }}"
@@ -282,12 +311,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $version = "${{ needs.resolve-version.outputs.version }}"
+          $version = "${{ env.PKG_VERSION }}"
+          $prefix = "${{ env.ARCHIVE_PREFIX }}"
           $sourceDir = "${{ github.workspace }}\build\${{ matrix.platform }}"
           $outputDir = "${{ github.workspace }}\output"
           # Inno Setup is pre-installed on windows-latest
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
             "/DAppVersion=$version" `
+            "/DAppPrefix=$prefix" `
             "/DSourceDir=$sourceDir" `
             "/DOutputDir=$outputDir" `
             "installer\setup.iss"
@@ -296,7 +327,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: openclaw-${{ matrix.platform }}
+          name: ${{ env.ARCHIVE_PREFIX }}-${{ matrix.platform }}
           path: output/*
           retention-days: 30
 
@@ -324,24 +355,31 @@ jobs:
 
       - name: Generate latest.json manifest
         run: |
-          VERSION="${{ needs.resolve-version.outputs.version }}"
+          VER_ZH="${{ needs.resolve-version.outputs.version_zh }}"
+          VER_EN="${{ needs.resolve-version.outputs.version_en }}"
           cat > release/latest.json <<EOF
           {
-            "version": "$VERSION",
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "downloads": {
-              "win-x64": {
-                "zip": "openclaw-$VERSION-win-x64.zip",
-                "installer": "openclaw-$VERSION-win-x64-setup.exe"
+            "editions": {
+              "zh": {
+                "version": "$VER_ZH",
+                "package": "@qingchencloud/openclaw-zh",
+                "downloads": {
+                  "win-x64": { "zip": "openclaw-zh-$VER_ZH-win-x64.zip", "installer": "openclaw-zh-$VER_ZH-win-x64-setup.exe" },
+                  "mac-arm64": { "archive": "openclaw-zh-$VER_ZH-mac-arm64.tar.gz" },
+                  "linux-x64": { "archive": "openclaw-zh-$VER_ZH-linux-x64.tar.gz" },
+                  "linux-arm64": { "archive": "openclaw-zh-$VER_ZH-linux-arm64.tar.gz" }
+                }
               },
-              "mac-arm64": {
-                "archive": "openclaw-$VERSION-mac-arm64.tar.gz"
-              },
-              "linux-x64": {
-                "archive": "openclaw-$VERSION-linux-x64.tar.gz"
-              },
-              "linux-arm64": {
-                "archive": "openclaw-$VERSION-linux-arm64.tar.gz"
+              "en": {
+                "version": "$VER_EN",
+                "package": "openclaw",
+                "downloads": {
+                  "win-x64": { "zip": "openclaw-$VER_EN-win-x64.zip", "installer": "openclaw-$VER_EN-win-x64-setup.exe" },
+                  "mac-arm64": { "archive": "openclaw-$VER_EN-mac-arm64.tar.gz" },
+                  "linux-x64": { "archive": "openclaw-$VER_EN-linux-x64.tar.gz" },
+                  "linux-arm64": { "archive": "openclaw-$VER_EN-linux-arm64.tar.gz" }
+                }
               }
             }
           }
@@ -350,36 +388,36 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.resolve-version.outputs.version }}
-          name: OpenClaw ${{ needs.resolve-version.outputs.version }}
+          tag_name: v${{ needs.resolve-version.outputs.version_zh }}
+          name: OpenClaw ${{ needs.resolve-version.outputs.version_zh }}
           body: |
-            ## OpenClaw ${{ needs.resolve-version.outputs.version }} 独立安装包
+            ## OpenClaw 独立安装包 / Standalone Installer
 
             **零依赖安装** — 无需 Node.js，无需 npm，下载即用！
+            **Zero-dependency** — No Node.js, no npm, just download and run!
 
-            ### 📥 下载
+            ### 📥 汉化版 / Chinese Edition (`openclaw-zh-*`)
 
-            | 平台 | 文件 | 说明 |
+            | 平台 Platform | 文件 File | 说明 |
             |------|------|------|
-            | Windows x64 | `*-win-x64-setup.exe` | **推荐** 引导式安装 |
-            | Windows x64 | `*-win-x64.zip` | 绿色免安装版 |
-            | macOS ARM (Apple Silicon) | `*-mac-arm64.tar.gz` | 解压即用 |
-            | Linux x64 | `*-linux-x64.tar.gz` | 解压即用 |
-            | Linux ARM64 (树莓派等) | `*-linux-arm64.tar.gz` | 解压即用 |
+            | Windows x64 | `openclaw-zh-*-win-x64-setup.exe` | **推荐** 引导安装 |
+            | Windows x64 | `openclaw-zh-*-win-x64.zip` | 绿色免安装 |
+            | macOS ARM64 | `openclaw-zh-*-mac-arm64.tar.gz` | Apple Silicon |
+            | Linux x64 | `openclaw-zh-*-linux-x64.tar.gz` | 解压即用 |
+            | Linux ARM64 | `openclaw-zh-*-linux-arm64.tar.gz` | 树莓派等 |
 
-            ### 🚀 安装方法
+            ### � Official Edition (`openclaw-*`)
 
-            **Windows**: 下载 `.exe` 安装包，双击运行安装向导
-
-            **macOS / Linux**:
-            ```bash
-            curl -fsSL https://dl.qrj.ai/openclaw/install.sh | bash
-            ```
-
-            或手动: 下载对应平台的 `.tar.gz` → 解压 → 将目录加入 PATH
+            | Platform | File | Note |
+            |------|------|------|
+            | Windows x64 | `openclaw-*-win-x64-setup.exe` | Guided installer |
+            | Windows x64 | `openclaw-*-win-x64.zip` | Portable |
+            | macOS ARM64 | `openclaw-*-mac-arm64.tar.gz` | Apple Silicon |
+            | Linux x64 | `openclaw-*-linux-x64.tar.gz` | Extract & run |
+            | Linux ARM64 | `openclaw-*-linux-arm64.tar.gz` | Raspberry Pi etc. |
 
             ---
-            由 [晴辰云](https://gpt.qt.cool) 构建 · [ClawPanel 图形管理面板](https://github.com/qingchencloud/clawpanel)
+            由 [晴辰云](https://gpt.qt.cool) 构建 · [ClawPanel](https://github.com/qingchencloud/clawpanel)
           files: release/*
           draft: false
           prerelease: false
@@ -418,21 +456,27 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          VERSION="${{ needs.resolve-version.outputs.version }}"
-          PREFIX="openclaw-standalone/${VERSION}"
+          VER_ZH="${{ needs.resolve-version.outputs.version_zh }}"
+          VER_EN="${{ needs.resolve-version.outputs.version_en }}"
           FAILED=0
           for file in upload/*; do
             FILENAME=$(basename "$file")
             SIZE_MB=$(( $(stat --format=%s "$file") / 1048576 ))
             echo "Uploading $FILENAME (${SIZE_MB}MB) ..."
             if [ "$SIZE_MB" -gt 290 ]; then
-              echo "⚠ Skipping $FILENAME (${SIZE_MB}MB > 290MB wrangler limit, available in GitHub Release)"
+              echo "Skipping $FILENAME (${SIZE_MB}MB > 290MB wrangler limit, available in GitHub Release)"
               continue
             fi
-            if wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file" --remote; then
-              echo "✓ $FILENAME uploaded"
+            # Route to edition-specific R2 paths
+            if echo "$FILENAME" | grep -q "^openclaw-zh-"; then
+              PREFIX="openclaw-standalone/zh/${VER_ZH}"
             else
-              echo "⚠ Failed to upload $FILENAME, continuing..."
+              PREFIX="openclaw-standalone/en/${VER_EN}"
+            fi
+            if wrangler r2 object put "clawpanel-releases/${PREFIX}/${FILENAME}" --file "$file" --remote; then
+              echo "Uploaded: $FILENAME"
+            else
+              echo "Failed: $FILENAME, continuing..."
               FAILED=$((FAILED + 1))
             fi
           done
@@ -443,14 +487,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          VERSION="${{ needs.resolve-version.outputs.version }}"
+          VER_ZH="${{ needs.resolve-version.outputs.version_zh }}"
+          VER_EN="${{ needs.resolve-version.outputs.version_en }}"
           cat > /tmp/latest.json <<EOF
           {
-            "version": "$VERSION",
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "base_url": "https://dl.qrj.ai/openclaw-standalone/$VERSION"
+            "editions": {
+              "zh": { "version": "$VER_ZH", "base_url": "https://dl.qrj.ai/openclaw-standalone/zh/$VER_ZH" },
+              "en": { "version": "$VER_EN", "base_url": "https://dl.qrj.ai/openclaw-standalone/en/$VER_EN" }
+            }
           }
           EOF
           wrangler r2 object put "clawpanel-releases/openclaw-standalone/latest.json" \
             --file /tmp/latest.json --content-type application/json --remote
-          echo "latest.json updated to version $VERSION"
+          echo "latest.json updated (zh=$VER_ZH, en=$VER_EN)"
