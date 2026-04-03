@@ -70,39 +70,64 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [zh, en]
-        os: [windows-latest, macos-15, ubuntu-latest, ubuntu-24.04-arm]
         include:
+          # Chinese edition (汉化版)
           - os: windows-latest
             platform: win-x64
             archive_ext: zip
+            edition: zh
+            pkg: '@qingchencloud/openclaw-zh'
           - os: macos-15
             platform: mac-arm64
             archive_ext: tar.gz
+            edition: zh
+            pkg: '@qingchencloud/openclaw-zh'
           - os: ubuntu-latest
             platform: linux-x64
             archive_ext: tar.gz
+            edition: zh
+            pkg: '@qingchencloud/openclaw-zh'
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             archive_ext: tar.gz
-          - edition: zh
+            edition: zh
             pkg: '@qingchencloud/openclaw-zh'
-          - edition: en
+          # Official edition (官方原版)
+          - os: windows-latest
+            platform: win-x64
+            archive_ext: zip
+            edition: en
             pkg: 'openclaw'
-
-    # Skip builds when user selects a specific edition via workflow_dispatch
-    if: >-
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.edition == 'both' ||
-      github.event.inputs.edition == matrix.edition
+          - os: macos-15
+            platform: mac-arm64
+            archive_ext: tar.gz
+            edition: en
+            pkg: 'openclaw'
+          - os: ubuntu-latest
+            platform: linux-x64
+            archive_ext: tar.gz
+            edition: en
+            pkg: 'openclaw'
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            archive_ext: tar.gz
+            edition: en
+            pkg: 'openclaw'
 
     runs-on: ${{ matrix.os }}
 
-    env:
-      PKG_VERSION: ${{ matrix.edition == 'zh' && needs.resolve-version.outputs.version_zh || needs.resolve-version.outputs.version_en }}
-      ARCHIVE_PREFIX: ${{ matrix.edition == 'zh' && 'openclaw-zh' || 'openclaw' }}
-
     steps:
+      - name: Set edition variables
+        shell: bash
+        run: |
+          if [ "${{ matrix.edition }}" = "zh" ]; then
+            echo "PKG_VERSION=${{ needs.resolve-version.outputs.version_zh }}" >> $GITHUB_ENV
+            echo "ARCHIVE_PREFIX=openclaw-zh" >> $GITHUB_ENV
+          else
+            echo "PKG_VERSION=${{ needs.resolve-version.outputs.version_en }}" >> $GITHUB_ENV
+            echo "ARCHIVE_PREFIX=openclaw" >> $GITHUB_ENV
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
