@@ -261,6 +261,23 @@ jobs:
           Get-ChildItem output
 
       # ===== Inno Setup installer (Windows only) =====
+      # Remove deeply nested node_modules AFTER zip is created but BEFORE Inno Setup,
+      # to avoid MAX_PATH (260 char) errors. The zip archive retains all files.
+      - name: Flatten nested node_modules for Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nmDir = "build/${{ matrix.platform }}/node_modules"
+          foreach ($pkgPath in @("$nmDir\@qingchencloud\openclaw-zh", "$nmDir\openclaw")) {
+            if (Test-Path $pkgPath) {
+              $nested = Get-ChildItem -Path $pkgPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue
+              if ($nested) {
+                Write-Host "Removing $($nested.Count) nested node_modules dirs inside $(Split-Path $pkgPath -Leaf) for Inno Setup"
+                $nested | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+              }
+            }
+          }
+
       - name: Build Inno Setup installer
         if: runner.os == 'Windows'
         shell: pwsh
