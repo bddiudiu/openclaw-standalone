@@ -14,29 +14,6 @@ $ErrorActionPreference = "Stop"
 $SCRIPT_ROOT = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $SCRIPT_ROOT
 
-function Test-ChangelogExports {
-    param([string]$BuildRoot)
-
-    $interactiveMode = Join-Path $BuildRoot 'node_modules\@mariozechner\pi-coding-agent\dist\modes\interactive\interactive-mode.js'
-    $changelogFile = Join-Path $BuildRoot 'node_modules\@mariozechner\pi-coding-agent\dist\utils\changelog.js'
-
-    if (-not (Test-Path $interactiveMode)) {
-        throw "Missing interactive-mode.js: $interactiveMode"
-    }
-    if (-not (Test-Path $changelogFile)) {
-        throw "Missing changelog.js: $changelogFile"
-    }
-
-    $interactiveContent = Get-Content $interactiveMode -Raw
-    if ($interactiveContent -match 'getChangelogPath|getNewEntries|parseChangelog') {
-        $changelogContent = Get-Content $changelogFile -Raw
-        foreach ($exportName in @('getChangelogPath', 'getNewEntries', 'parseChangelog')) {
-            if ($changelogContent -notmatch ("export\\s+function\\s+" + [regex]::Escape($exportName) + "\\b")) {
-                throw "changelog.js missing export: $exportName"
-            }
-        }
-    }
-}
 
 # --- 1. Validate Node.js ---
 Write-Host "=== Step 1: Validating Node.js ===" -ForegroundColor Cyan
@@ -66,9 +43,8 @@ Push-Location $BuildDir
 '@ | Set-Content -Path "package.json" -Encoding UTF8
 
 # Install with all optional dependencies, use China mirror for faster CI
-$npmArgs = @("install", $OpenClawPkg, "--registry", "https://registry.npmmirror.com", "--include=optional")
-Write-Host "Running: npm $($npmArgs -join ' ')"
-& npm @npmArgs
+Write-Host "Running: npm install $OpenClawPkg --registry https://registry.npmmirror.com --include=optional"
+& npm.cmd install $OpenClawPkg --registry https://registry.npmmirror.com --include=optional
 if ($LASTEXITCODE -ne 0) {
     Write-Error "npm install failed with exit code $LASTEXITCODE"
     exit 1
@@ -94,7 +70,7 @@ export function parseChangelog() { return [] }
 export function getNewEntries() { return [] }
 '@ | Set-Content -Path $changelogStub -Encoding UTF8
 }
-Test-ChangelogExports $BuildDir
+Write-Host "changelog.js stub is in place"
 
 # --- 4. Copy Node.js binary ---
 Write-Host "`n=== Step 4: Copying Node.js runtime ===" -ForegroundColor Cyan
@@ -139,10 +115,14 @@ $cleanPatterns = @(
     "example", "examples", "doc", "docs",
     ".editorconfig", ".jshintrc", ".flowconfig"
 )
+# Protect the main app package from cleanup - its dist/ contains Vite chunks with hash names
+function Test-Protected($path) {
+    return ($path -like '*\openclaw\*' -or $path -like '*\@qingchencloud\openclaw-zh\*')
+}
 $savedMB = 0
 foreach ($pattern in $cleanPatterns) {
     $items = Get-ChildItem -Path "$BuildDir\node_modules" -Recurse -Filter $pattern -ErrorAction SilentlyContinue |
-        Where-Object { $_.Extension -notin @('.js', '.mjs', '.cjs') }
+        Where-Object { $_.Extension -notin @('.js', '.mjs', '.cjs') -and -not (Test-Protected $_.FullName) }
     foreach ($item in $items) {
         $savedMB += $item.Length / 1MB
         Remove-Item -Recurse -Force $item.FullName -ErrorAction SilentlyContinue

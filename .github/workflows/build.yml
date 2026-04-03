@@ -173,11 +173,15 @@ jobs:
           fi
 
       # ===== Cleanup to reduce size =====
+      # IMPORTANT: Never clean files inside the openclaw package itself (openclaw/ or @qingchencloud/openclaw-zh/).
+      # Its dist/ contains Vite/Rollup chunks with hash names (history-CMXy8eH-.js, changelog-*.js, etc.)
+      # that can match cleanup patterns. Only clean OTHER dependency packages.
       - name: Cleanup unnecessary files (Unix)
         if: runner.os != 'Windows'
         run: |
-          echo "Before: $(du -sm build/${{ matrix.platform }}/node_modules | cut -f1)MB"
-          find "build/${{ matrix.platform }}/node_modules" -type f \( \
+          NM="build/${{ matrix.platform }}/node_modules"
+          echo "Before: $(du -sm "$NM" | cut -f1)MB"
+          find "$NM" -type f \( \
             -name "*.ts" ! -name "*.d.ts" -o \
             -name "*.map" -o \
             -name "CHANGELOG*" -o \
@@ -189,13 +193,18 @@ jobs:
             -name "Makefile" -o \
             -name ".editorconfig" -o \
             -name ".travis.yml" \
-          \) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" -delete 2>/dev/null || true
-          find "build/${{ matrix.platform }}/node_modules" -type d \( \
+          \) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" \
+             ! -path "*/openclaw/*" \
+             ! -path "*/@qingchencloud/openclaw-zh/*" \
+             -delete 2>/dev/null || true
+          find "$NM" -type d \( \
             -name "test" -o -name "tests" -o -name "__tests__" -o \
             -name "spec" -o -name "example" -o -name "examples" -o \
             -name ".github" -o -name ".circleci" \
-          \) -exec rm -rf {} + 2>/dev/null || true
-          echo "After: $(du -sm build/${{ matrix.platform }}/node_modules | cut -f1)MB"
+          \) ! -path "*/openclaw/*" \
+             ! -path "*/@qingchencloud/openclaw-zh/*" \
+             -exec rm -rf {} + 2>/dev/null || true
+          echo "After: $(du -sm "$NM" | cut -f1)MB"
 
       - name: Cleanup unnecessary files (Windows)
         if: runner.os == 'Windows'
@@ -206,21 +215,19 @@ jobs:
                         ".npmignore", ".eslintrc*", ".prettierrc*", "Makefile",
                         ".editorconfig", ".travis.yml")
           $dirPatterns = @("test", "tests", "__tests__", "spec", "example", "examples", ".github", ".circleci")
+          # Protect the main app package from cleanup
+          function Test-Protected($path) {
+            return ($path -match '[\\/](openclaw|@qingchencloud[\\/]openclaw-zh)[\\/]')
+          }
           foreach ($p in $patterns) {
             Get-ChildItem -Path $nmDir -Recurse -Filter $p -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -notlike "*.d.ts" -and $_.Extension -notin @('.js', '.mjs', '.cjs') } |
+              Where-Object { $_.Name -notlike "*.d.ts" -and $_.Extension -notin @('.js', '.mjs', '.cjs') -and -not (Test-Protected $_.FullName) } |
               Remove-Item -Force -ErrorAction SilentlyContinue
           }
           foreach ($d in $dirPatterns) {
             Get-ChildItem -Path $nmDir -Recurse -Directory -Filter $d -ErrorAction SilentlyContinue |
+              Where-Object { -not (Test-Protected $_.FullName) } |
               Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-          }
-          # Remove deeply nested node_modules to avoid MAX_PATH overflow in Inno Setup
-          foreach ($pkgPath in @("$nmDir\@qingchencloud\openclaw-zh", "$nmDir\openclaw")) {
-            if (Test-Path $pkgPath) {
-              Get-ChildItem -Path $pkgPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue |
-                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-            }
           }
 
       # ===== Package =====
