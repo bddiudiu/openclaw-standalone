@@ -1,3 +1,10 @@
 #!/bin/sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/node_modules/@qingchencloud/openclaw-zh/openclaw.mjs" "$@"
+if [ -f "$SCRIPT_DIR/node_modules/@qingchencloud/openclaw-zh/openclaw.mjs" ]; then
+    exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/node_modules/@qingchencloud/openclaw-zh/openclaw.mjs" "$@"
+elif [ -f "$SCRIPT_DIR/node_modules/openclaw/openclaw.mjs" ]; then
+    exec "$SCRIPT_DIR/node" "$SCRIPT_DIR/node_modules/openclaw/openclaw.mjs" "$@"
+else
+    echo "[ERROR] OpenClaw not found. Please reinstall."
+    exit 1
+fi

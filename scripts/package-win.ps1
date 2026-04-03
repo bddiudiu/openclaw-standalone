@@ -102,8 +102,11 @@ Copy-Item "shims\openclaw.cmd" "$BuildDir\openclaw.cmd"
 Write-Host "`n=== Step 6: Reading version info ===" -ForegroundColor Cyan
 $pkgJsonPath = "$BuildDir\node_modules\@qingchencloud\openclaw-zh\package.json"
 if (-not (Test-Path $pkgJsonPath)) {
-    # Fallback: try without scope
     $pkgJsonPath = "$BuildDir\node_modules\openclaw\package.json"
+}
+if (-not (Test-Path $pkgJsonPath)) {
+    Write-Error "Cannot find package.json for version detection. Checked @qingchencloud/openclaw-zh and openclaw."
+    exit 1
 }
 $pkgJson = Get-Content $pkgJsonPath -Raw | ConvertFrom-Json
 $version = $pkgJson.version

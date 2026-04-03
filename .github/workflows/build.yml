@@ -8,6 +8,10 @@ on:
         description: 'OpenClaw version to package (leave empty for latest)'
         required: false
         default: ''
+      openclaw_pkg:
+        description: 'NPM package name (openclaw or @qingchencloud/openclaw-zh)'
+        required: false
+        default: '@qingchencloud/openclaw-zh'
       upload_r2:
         description: 'Upload to Cloudflare R2'
         required: false
@@ -22,7 +26,7 @@ on:
 
 env:
   NODE_VERSION: '22'
-  OPENCLAW_PKG: '@qingchencloud/openclaw-zh'
+  OPENCLAW_PKG: ${{ github.event.inputs.openclaw_pkg || '@qingchencloud/openclaw-zh' }}
   NPM_REGISTRY: 'https://registry.npmmirror.com'
 
 jobs:
@@ -147,6 +151,21 @@ jobs:
           build_date=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
           EOF
 
+      # ===== Patch upstream bugs =====
+      - name: Patch missing changelog.js (upstream bug in @mariozechner/pi-coding-agent)
+        shell: bash
+        run: |
+          STUB="build/${{ matrix.platform }}/node_modules/@mariozechner/pi-coding-agent/dist/utils/changelog.js"
+          if [ ! -f "$STUB" ]; then
+            echo "Patching: creating missing changelog.js stub"
+            mkdir -p "$(dirname "$STUB")"
+            cat > "$STUB" <<'STUBEOF'
+          export function getChangelogPath() { return null }
+          export function parseChangelog() { return [] }
+          export function getNewEntries() { return [] }
+          STUBEOF
+          fi
+
       # ===== Cleanup to reduce size =====
       - name: Cleanup unnecessary files (Unix)
         if: runner.os != 'Windows'
@@ -190,11 +209,12 @@ jobs:
             Get-ChildItem -Path $nmDir -Recurse -Directory -Filter $d -ErrorAction SilentlyContinue |
               Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           }
-          # Remove ALL nested node_modules inside openclaw-zh package tree (deeply nested deps like @jimp/plugin-print/zod cause MAX_PATH overflow in Inno Setup)
-          $zhPath = "$nmDir\@qingchencloud\openclaw-zh"
-          if (Test-Path $zhPath) {
-            Get-ChildItem -Path $zhPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue |
-              Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          # Remove deeply nested node_modules to avoid MAX_PATH overflow in Inno Setup
+          foreach ($pkgPath in @("$nmDir\@qingchencloud\openclaw-zh", "$nmDir\openclaw")) {
+            if (Test-Path $pkgPath) {
+              Get-ChildItem -Path $pkgPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            }
           }
 
       # ===== Package =====

@@ -120,6 +120,10 @@ PKG_JSON="$BUILD_DIR/node_modules/@qingchencloud/openclaw-zh/package.json"
 if [ ! -f "$PKG_JSON" ]; then
     PKG_JSON="$BUILD_DIR/node_modules/openclaw/package.json"
 fi
+if [ ! -f "$PKG_JSON" ]; then
+    echo "ERROR: Cannot find package.json for version detection."
+    exit 1
+fi
 VERSION="$(node -e "console.log(require('$PKG_JSON').version)")"
 echo "OpenClaw version: $VERSION"
 
