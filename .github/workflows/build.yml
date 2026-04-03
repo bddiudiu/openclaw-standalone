@@ -183,7 +183,7 @@ jobs:
             -name "Makefile" -o \
             -name ".editorconfig" -o \
             -name ".travis.yml" \
-          \) -delete 2>/dev/null || true
+          \) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" -delete 2>/dev/null || true
           find "build/${{ matrix.platform }}/node_modules" -type d \( \
             -name "test" -o -name "tests" -o -name "__tests__" -o \
             -name "spec" -o -name "example" -o -name "examples" -o \
@@ -202,7 +202,7 @@ jobs:
           $dirPatterns = @("test", "tests", "__tests__", "spec", "example", "examples", ".github", ".circleci")
           foreach ($p in $patterns) {
             Get-ChildItem -Path $nmDir -Recurse -Filter $p -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -notlike "*.d.ts" } |
+              Where-Object { $_.Name -notlike "*.d.ts" -and $_.Extension -notin @('.js', '.mjs', '.cjs') } |
               Remove-Item -Force -ErrorAction SilentlyContinue
           }
           foreach ($d in $dirPatterns) {

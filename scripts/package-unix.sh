@@ -155,7 +155,7 @@ find "$BUILD_DIR/node_modules" -type f \( \
     -name "Makefile" -o \
     -name ".editorconfig" -o \
     -name ".travis.yml" \
-\) -delete 2>/dev/null || true
+\) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" -delete 2>/dev/null || true
 
 # Remove unnecessary directories
 find "$BUILD_DIR/node_modules" -type d \( \

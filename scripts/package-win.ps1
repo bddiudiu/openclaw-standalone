@@ -134,7 +134,8 @@ $cleanPatterns = @(
 )
 $savedMB = 0
 foreach ($pattern in $cleanPatterns) {
-    $items = Get-ChildItem -Path "$BuildDir\node_modules" -Recurse -Filter $pattern -ErrorAction SilentlyContinue
+    $items = Get-ChildItem -Path "$BuildDir\node_modules" -Recurse -Filter $pattern -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -notin @('.js', '.mjs', '.cjs') }
     foreach ($item in $items) {
         $savedMB += $item.Length / 1MB
         Remove-Item -Recurse -Force $item.FullName -ErrorAction SilentlyContinue
