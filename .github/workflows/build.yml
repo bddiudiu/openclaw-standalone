@@ -156,8 +156,14 @@ jobs:
         shell: bash
         run: |
           STUB="build/${{ matrix.platform }}/node_modules/@mariozechner/pi-coding-agent/dist/utils/changelog.js"
+          NEEDS_PATCH=false
           if [ ! -f "$STUB" ]; then
-            echo "Patching: creating missing changelog.js stub"
+            NEEDS_PATCH=true
+          elif ! grep -q 'export function getChangelogPath' "$STUB" 2>/dev/null; then
+            NEEDS_PATCH=true
+          fi
+          if [ "$NEEDS_PATCH" = true ]; then
+            echo "Patching: creating/replacing changelog.js stub"
             mkdir -p "$(dirname "$STUB")"
             cat > "$STUB" <<'STUBEOF'
           export function getChangelogPath() { return null }

@@ -75,10 +75,17 @@ if ($LASTEXITCODE -ne 0) {
 }
 Pop-Location
 
-# --- 3b. Patch: create missing changelog.js stub (upstream bug in @mariozechner/pi-coding-agent) ---
+# --- 3b. Patch: ensure changelog.js has required exports (upstream bug in @mariozechner/pi-coding-agent) ---
 $changelogStub = "$BuildDir\node_modules\@mariozechner\pi-coding-agent\dist\utils\changelog.js"
-if (-not (Test-Path $changelogStub)) {
-    Write-Host "Patching: creating missing changelog.js stub" -ForegroundColor Yellow
+$needsPatch = -not (Test-Path $changelogStub)
+if (-not $needsPatch) {
+    $existingContent = Get-Content $changelogStub -Raw -ErrorAction SilentlyContinue
+    if ($existingContent -notmatch 'export\s+function\s+getChangelogPath') {
+        $needsPatch = $true
+    }
+}
+if ($needsPatch) {
+    Write-Host "Patching: creating/replacing changelog.js stub" -ForegroundColor Yellow
     $stubDir = Split-Path $changelogStub
     if (-not (Test-Path $stubDir)) { New-Item -ItemType Directory -Force -Path $stubDir | Out-Null }
     @'
