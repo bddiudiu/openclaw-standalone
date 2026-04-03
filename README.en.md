@@ -29,7 +29,7 @@ Built and maintained by [QingChenCloud](https://gpt.qt.cool).
 
 ---
 
-## 📦 Choose Your Edition
+## Choose Your Edition
 
 This project provides **two editions** of pre-built packages, built from the same repository and CI pipeline:
 
@@ -42,7 +42,7 @@ Both editions are functionally identical — the only difference is the interfac
 
 ---
 
-## 📥 Installation
+## Installation
 
 ### Windows (Recommended: Setup Wizard)
 
@@ -78,7 +78,7 @@ Supported platforms:
 
 ---
 
-## 📥 Downloads
+## Downloads
 
 ### Official Edition (`openclaw-*`)
 
@@ -102,7 +102,7 @@ Supported platforms:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 # Show help
@@ -129,7 +129,7 @@ Install [ClawPanel](https://github.com/qingchencloud/clawpanel) for a visual man
 
 ---
 
-## 🏗️ How It Works
+## How It Works
 
 Core idea: **Pre-compile all native modules on CI runners for each platform, then bundle Node.js runtime + complete node_modules into a self-contained distribution.**
 
@@ -167,7 +167,7 @@ bash scripts/package-unix.sh
 
 ---
 
-## 🔄 Updating
+## Updating
 
 ### Automatic Updates
 ClawPanel automatically detects new versions and prompts for updates.
@@ -184,7 +184,7 @@ curl -fsSL https://dl.qrj.ai/openclaw/install.sh | EDITION=en bash
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 ### Q: What's the difference between Official and Chinese editions?
 A: They are functionally identical. The Chinese edition (`@qingchencloud/openclaw-zh`) has localized UI text and prompts. The Official edition (`openclaw`) is the same as the upstream npm package.
@@ -203,7 +203,7 @@ A: Yes, but we recommend keeping only one. If both are in PATH, the system will 
 
 ---
 
-## 📄 License
+## License
 
 [AGPL-3.0](LICENSE) + Commercial License
 
@@ -212,7 +212,7 @@ A: Yes, but we recommend keeping only one. If both are in PATH, the system will 
 
 ---
 
-## 🔗 Related Projects
+## Related Projects
 
 - [OpenClaw](https://github.com/openclaw/openclaw) — AI Agent Engine (upstream)
 - [OpenClaw Chinese](https://github.com/1186258278/OpenClawChineseTranslation) — Chinese localization source
