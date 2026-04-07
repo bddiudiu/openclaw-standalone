@@ -46,18 +46,18 @@ jobs:
             platform: win-x64
             archive_ext: zip
             pkg: 'openclaw'
-          - os: macos-15
-            platform: mac-arm64
-            archive_ext: tar.gz
-            pkg: 'openclaw'
-          - os: ubuntu-latest
-            platform: linux-x64
-            archive_ext: tar.gz
-            pkg: 'openclaw'
-          - os: ubuntu-24.04-arm
-            platform: linux-arm64
-            archive_ext: tar.gz
-            pkg: 'openclaw'
+#          - os: macos-15
+#            platform: mac-arm64
+#            archive_ext: tar.gz
+#            pkg: 'openclaw'
+#          - os: ubuntu-latest
+#            platform: linux-x64
+#            archive_ext: tar.gz
+#            pkg: 'openclaw'
+#          - os: ubuntu-24.04-arm
+#            platform: linux-arm64
+#            archive_ext: tar.gz
+#            pkg: 'openclaw'
 
     runs-on: ${{ matrix.os }}
 
@@ -171,33 +171,33 @@ jobs:
       # IMPORTANT: Never clean files inside the openclaw package itself (openclaw/).
       # Its dist/ contains Vite/Rollup chunks with hash names (history-CMXy8eH-.js, changelog-*.js, etc.)
       # that can match cleanup patterns. Only clean OTHER dependency packages.
-      - name: Cleanup unnecessary files (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          NM="build/${{ matrix.platform }}/node_modules"
-          echo "Before: $(du -sm "$NM" | cut -f1)MB"
-          find "$NM" -type f \( \
-            -name "*.ts" ! -name "*.d.ts" -o \
-            -name "*.map" -o \
-            -name "CHANGELOG*" -o \
-            -name "HISTORY*" -o \
-            -name "AUTHORS*" -o \
-            -name ".npmignore" -o \
-            -name ".eslintrc*" -o \
-            -name ".prettierrc*" -o \
-            -name "Makefile" -o \
-            -name ".editorconfig" -o \
-            -name ".travis.yml" \
-          \) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" \
-             ! -path "*/openclaw/*" \
-             -delete 2>/dev/null || true
-          find "$NM" -type d \( \
-            -name "test" -o -name "tests" -o -name "__tests__" -o \
-            -name "spec" -o -name "example" -o -name "examples" -o \
-            -name ".github" -o -name ".circleci" \
-          \) ! -path "*/openclaw/*" \
-             -exec rm -rf {} + 2>/dev/null || true
-          echo "After: $(du -sm "$NM" | cut -f1)MB"
+#      - name: Cleanup unnecessary files (Unix)
+#        if: runner.os != 'Windows'
+#        run: |
+#          NM="build/${{ matrix.platform }}/node_modules"
+#          echo "Before: $(du -sm "$NM" | cut -f1)MB"
+#          find "$NM" -type f \( \
+#            -name "*.ts" ! -name "*.d.ts" -o \
+#            -name "*.map" -o \
+#            -name "CHANGELOG*" -o \
+#            -name "HISTORY*" -o \
+#            -name "AUTHORS*" -o \
+#            -name ".npmignore" -o \
+#            -name ".eslintrc*" -o \
+#            -name ".prettierrc*" -o \
+#            -name "Makefile" -o \
+#            -name ".editorconfig" -o \
+#            -name ".travis.yml" \
+#          \) ! -name "*.js" ! -name "*.mjs" ! -name "*.cjs" \
+#             ! -path "*/openclaw/*" \
+#             -delete 2>/dev/null || true
+#          find "$NM" -type d \( \
+#            -name "test" -o -name "tests" -o -name "__tests__" -o \
+#            -name "spec" -o -name "example" -o -name "examples" -o \
+#            -name ".github" -o -name ".circleci" \
+#          \) ! -path "*/openclaw/*" \
+#             -exec rm -rf {} + 2>/dev/null || true
+#          echo "After: $(du -sm "$NM" | cut -f1)MB"
 
       - name: Cleanup unnecessary files (Windows)
         if: runner.os == 'Windows'
@@ -224,19 +224,19 @@ jobs:
           }
 
       # ===== Package =====
-      - name: Create archive (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          mkdir -p output
-          mv "build/${{ matrix.platform }}" "build/openclaw"
-          ARCHIVE="${{ env.ARCHIVE_PREFIX }}-${{ env.PKG_VERSION }}-${{ matrix.platform }}.tar.gz"
-          tar -czf "output/$ARCHIVE" -C build openclaw
-          mv "build/openclaw" "build/${{ matrix.platform }}"
-          # Generate checksum
-          cd output
-          shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || \
-          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || true
-          ls -lh
+#      - name: Create archive (Unix)
+#        if: runner.os != 'Windows'
+#        run: |
+#          mkdir -p output
+#          mv "build/${{ matrix.platform }}" "build/openclaw"
+#          ARCHIVE="${{ env.ARCHIVE_PREFIX }}-${{ env.PKG_VERSION }}-${{ matrix.platform }}.tar.gz"
+#          tar -czf "output/$ARCHIVE" -C build openclaw
+#          mv "build/openclaw" "build/${{ matrix.platform }}"
+#          # Generate checksum
+#          cd output
+#          shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || \
+#          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256" 2>/dev/null || true
+#          ls -lh
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
@@ -255,36 +255,36 @@ jobs:
       # ===== Inno Setup installer (Windows only) =====
       # Remove deeply nested node_modules AFTER zip is created but BEFORE Inno Setup,
       # to avoid MAX_PATH (260 char) errors. The zip archive retains all files.
-      - name: Flatten nested node_modules for Inno Setup
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $nmDir = "build/${{ matrix.platform }}/node_modules"
-          foreach ($pkgPath in @("$nmDir\openclaw")) {
-            if (Test-Path $pkgPath) {
-              $nested = Get-ChildItem -Path $pkgPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue
-              if ($nested) {
-                Write-Host "Removing $($nested.Count) nested node_modules dirs inside $(Split-Path $pkgPath -Leaf) for Inno Setup"
-                $nested | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-              }
-            }
-          }
-
-      - name: Build Inno Setup installer
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $version = "${{ env.PKG_VERSION }}"
-          $prefix = "${{ env.ARCHIVE_PREFIX }}"
-          $sourceDir = "${{ github.workspace }}\build\${{ matrix.platform }}"
-          $outputDir = "${{ github.workspace }}\output"
-          # Inno Setup is pre-installed on windows-latest
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            "/DAppVersion=$version" `
-            "/DAppPrefix=$prefix" `
-            "/DSourceDir=$sourceDir" `
-            "/DOutputDir=$outputDir" `
-            "installer\setup.iss"
+#      - name: Flatten nested node_modules for Inno Setup
+#        if: runner.os == 'Windows'
+#        shell: pwsh
+#        run: |
+#          $nmDir = "build/${{ matrix.platform }}/node_modules"
+#          foreach ($pkgPath in @("$nmDir\openclaw")) {
+#            if (Test-Path $pkgPath) {
+#              $nested = Get-ChildItem -Path $pkgPath -Directory -Filter "node_modules" -Recurse -ErrorAction SilentlyContinue
+#              if ($nested) {
+#                Write-Host "Removing $($nested.Count) nested node_modules dirs inside $(Split-Path $pkgPath -Leaf) for Inno Setup"
+#                $nested | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+#              }
+#            }
+#          }
+#
+#      - name: Build Inno Setup installer
+#        if: runner.os == 'Windows'
+#        shell: pwsh
+#        run: |
+#          $version = "${{ env.PKG_VERSION }}"
+#          $prefix = "${{ env.ARCHIVE_PREFIX }}"
+#          $sourceDir = "${{ github.workspace }}\build\${{ matrix.platform }}"
+#          $outputDir = "${{ github.workspace }}\output"
+#          # Inno Setup is pre-installed on windows-latest
+#          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+#            "/DAppVersion=$version" `
+#            "/DAppPrefix=$prefix" `
+#            "/DSourceDir=$sourceDir" `
+#            "/DOutputDir=$outputDir" `
+#            "installer\setup.iss"
 
       # ===== Upload artifacts =====
       - name: Upload artifacts
