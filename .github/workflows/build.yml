@@ -455,12 +455,11 @@ jobs:
           ALIYUN_OSS_PUBLIC_BASE_URL: ${{ vars.ALIYUN_OSS_PUBLIC_BASE_URL }}
         run: |
           VER="${{ needs.resolve-version.outputs.version }}"
-          prefix = (os.environ.get("ALIYUN_OSS_PREFIX") or "openclaw-standalone").strip("/")
           cat > /tmp/latest.json <<EOF
           {
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "editions": {
-              "en": { "version": "$VER", "base_url": "$PUBLIC_BASE_URL/prefix/en/$VER/openclaw-$VER-win-x64.zip" }
+              "en": { "version": "$VER", "base_url": "$PUBLIC_BASE_URL/openclaw-standalone/en/$VER/openclaw-$VER-win-x64.zip" }
             }
           }
           EOF
