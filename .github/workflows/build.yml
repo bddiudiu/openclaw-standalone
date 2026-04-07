@@ -7,16 +7,6 @@ on:
         description: 'OpenClaw version to package (leave empty for latest)'
         required: false
         default: ''
-      upload_oss:
-        description: 'Upload to Aliyun OSS'
-        required: false
-        type: boolean
-        default: true
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
 
 env:
   NODE_VERSION: '22'
@@ -308,7 +298,7 @@ jobs:
   release:
     needs: [resolve-version, build]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
 
@@ -378,8 +368,7 @@ jobs:
   upload-oss:
     needs: [resolve-version, build, release]
     runs-on: ubuntu-latest
-    if: >-
-      (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.upload_oss == 'true')
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download all artifacts
@@ -466,13 +455,12 @@ jobs:
           ALIYUN_OSS_PUBLIC_BASE_URL: ${{ vars.ALIYUN_OSS_PUBLIC_BASE_URL }}
         run: |
           VER="${{ needs.resolve-version.outputs.version }}"
-          PUBLIC_BASE_URL="${ALIYUN_OSS_PUBLIC_BASE_URL:-https://plugins.coocare.com/openclaw-standalone}"
-          PUBLIC_BASE_URL="${PUBLIC_BASE_URL%/}"
+          prefix = (os.environ.get("ALIYUN_OSS_PREFIX") or "openclaw-standalone").strip("/")
           cat > /tmp/latest.json <<EOF
           {
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "editions": {
-              "en": { "version": "$VER", "base_url": "$PUBLIC_BASE_URL/en/$VER" }
+              "en": { "version": "$VER", "base_url": "$PUBLIC_BASE_URL/prefix/en/$VER/openclaw-$VER-win-x64.zip" }
             }
           }
           EOF
@@ -486,8 +474,7 @@ jobs:
               endpoint = f"https://{endpoint}"
           access_key_id = os.environ["ALIYUN_OSS_ACCESS_KEY_ID"]
           access_key_secret = os.environ["ALIYUN_OSS_ACCESS_KEY_SECRET"]
-          prefix = (os.environ.get("ALIYUN_OSS_PREFIX") or "openclaw-standalone").strip("/")
-
+          
           auth = oss2.Auth(access_key_id, access_key_secret)
           bucket = oss2.Bucket(auth, endpoint, bucket_name)
           object_key = f"{prefix}/latest.json"
