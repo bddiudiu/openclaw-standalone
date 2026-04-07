@@ -13,15 +13,15 @@ echo ╚════════════════════════
 echo.
 
 set "INSTALL_DIR=%LOCALAPPDATA%\OpenClaw"
-set "R2_BASE=https://dl.qrj.ai/openclaw-standalone"
+set "DOWNLOAD_BASE=https://plugins.coocare.com/openclaw-standalone"
 set "PLATFORM=win-x64"
 
 :: --- Get latest version ---
 echo [INFO] 获取最新版本...
-for /f "delims=" %%v in ('powershell -NoProfile -Command "(Invoke-RestMethod -Uri '%R2_BASE%/latest.json' -TimeoutSec 5).version" 2^>nul') do set "VERSION=%%v"
+for /f "delims=" %%v in ('powershell -NoProfile -Command "(Invoke-RestMethod -Uri '%DOWNLOAD_BASE%/latest.json' -TimeoutSec 5).version" 2^>nul') do set "VERSION=%%v"
 
 if "%VERSION%"=="" (
-    echo [WARN] R2 获取失败，尝试 GitHub...
+    echo [WARN] 主下载源获取失败，尝试 GitHub...
     for /f "delims=" %%v in ('powershell -NoProfile -Command "(Invoke-RestMethod -Uri 'https://api.github.com/repos/qingchencloud/openclaw-standalone/releases/latest' -TimeoutSec 10).tag_name -replace 'v',''" 2^>nul') do set "VERSION=%%v"
 )
 
@@ -36,14 +36,14 @@ echo [INFO] 最新版本: %VERSION%
 
 :: --- Download ---
 set "ARCHIVE=openclaw-%VERSION%-win-x64.zip"
-set "DOWNLOAD_URL=%R2_BASE%/%VERSION%/%ARCHIVE%"
+set "DOWNLOAD_URL=%DOWNLOAD_BASE%/%VERSION%/%ARCHIVE%"
 set "TMP_FILE=%TEMP%\%ARCHIVE%"
 
 echo [INFO] 下载安装包...
 powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '%DOWNLOAD_URL%' -OutFile '%TMP_FILE%' -UseBasicParsing } catch { exit 1 }"
 
 if errorlevel 1 (
-    echo [WARN] R2 下载失败，尝试 GitHub...
+    echo [WARN] 主下载源下载失败，尝试 GitHub...
     set "DOWNLOAD_URL=https://github.com/qingchencloud/openclaw-standalone/releases/download/v%VERSION%/%ARCHIVE%"
     powershell -NoProfile -Command "try { $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri '!DOWNLOAD_URL!' -OutFile '%TMP_FILE%' -UseBasicParsing } catch { exit 1 }"
 )

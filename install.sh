@@ -7,7 +7,7 @@ set -euo pipefail
 
 # --- Configuration ---
 INSTALL_DIR="${OPENCLAW_HOME:-$HOME/.openclaw-bin}"
-R2_BASE="https://dl.qrj.ai/openclaw-standalone"
+DOWNLOAD_BASE="https://plugins.coocare.com/openclaw-standalone"
 GITHUB_BASE="https://github.com/qingchencloud/openclaw-standalone/releases/download"
 
 # --- Colors ---
@@ -47,9 +47,9 @@ detect_platform() {
 # --- Get latest version ---
 get_latest_version() {
     local version=""
-    # Try R2 first
+    # 优先从主下载源获取 latest.json。
     if command -v curl &>/dev/null; then
-        version=$(curl -fsSL --connect-timeout 5 "$R2_BASE/latest.json" 2>/dev/null | \
+        version=$(curl -fsSL --connect-timeout 5 "$DOWNLOAD_BASE/latest.json" 2>/dev/null | \
             grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
             grep -o '"[^"]*"$' | tr -d '"') || true
     fi
@@ -97,14 +97,14 @@ main() {
     info "最新版本: $VERSION"
 
     ARCHIVE="openclaw-${VERSION}-${PLATFORM}.tar.gz"
-    DOWNLOAD_URL="${R2_BASE}/${VERSION}/${ARCHIVE}"
+    DOWNLOAD_URL="${DOWNLOAD_BASE}/${VERSION}/${ARCHIVE}"
     GITHUB_URL="${GITHUB_BASE}/v${VERSION}/${ARCHIVE}"
     TMP_DIR=$(mktemp -d)
     TMP_FILE="${TMP_DIR}/${ARCHIVE}"
 
     info "下载安装包..."
     if ! download "$DOWNLOAD_URL" "$TMP_FILE"; then
-        warn "R2 下载失败，尝试 GitHub..."
+        warn "主下载源失败，尝试 GitHub..."
         if ! download "$GITHUB_URL" "$TMP_FILE"; then
             rm -rf "$TMP_DIR"
             error "下载失败。请检查网络连接或手动下载：\n  $GITHUB_URL"
