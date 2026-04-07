@@ -459,7 +459,7 @@ jobs:
           {
             "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "editions": {
-              "en": { "version": "$VER", "base_url": "ALIYUN_OSS_PUBLIC_BASE_URL/openclaw-standalone/en/$VER/openclaw-$VER-win-x64.zip" }
+              "en": { "version": "$VER", "base_url": "ALIYUN_OSS_PUBLIC_BASE_URLopenclaw-standalone/en/$VER/openclaw-$VER-win-x64.zip" }
             }
           }
           EOF
