@@ -172,6 +172,20 @@ bash scripts/package-unix.sh
 OPENCLAW_PKG=openclaw bash scripts/package-unix.sh
 ```
 
+### GitHub Actions 发布到阿里云 OSS
+
+`build.yml` 现在会在打 tag，或手动触发并勾选 `upload_oss` 时，把最终产物上传到阿里云 OSS。
+
+需要在仓库 Settings 中配置以下 GitHub Secrets：
+- `ALIYUN_OSS_BUCKET`：OSS Bucket 名称
+- `ALIYUN_OSS_ENDPOINT`：OSS Endpoint，例如 `oss-cn-hangzhou.aliyuncs.com`
+- `ALIYUN_OSS_ACCESS_KEY_ID`：阿里云 AccessKey ID
+- `ALIYUN_OSS_ACCESS_KEY_SECRET`：阿里云 AccessKey Secret
+
+可选 GitHub Variables：
+- `ALIYUN_OSS_PREFIX`：对象前缀，默认 `openclaw-standalone`
+- `ALIYUN_OSS_PUBLIC_BASE_URL`：对外下载基址，默认 `https://dl.qrj.ai/openclaw-standalone`
+
 ---
 
 ## 更新

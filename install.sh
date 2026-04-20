@@ -8,7 +8,7 @@ set -euo pipefail
 # --- Configuration ---
 INSTALL_DIR="${OPENCLAW_HOME:-$HOME/.openclaw-bin}"
 DOWNLOAD_BASE="https://plugins.coocare.com/openclaw-standalone"
-GITHUB_BASE="https://github.com/qingchencloud/openclaw-standalone/releases/download"
+GITHUB_BASE="https://github.com/bddiudiu/openclaw-standalone"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -56,7 +56,7 @@ get_latest_version() {
     # Fallback: GitHub API
     if [ -z "$version" ]; then
         version=$(curl -fsSL --connect-timeout 5 \
-            "https://api.github.com/repos/qingchencloud/openclaw-standalone/releases/latest" 2>/dev/null | \
+            "https://api.github.com/repos/bddiudiu/openclaw-standalone/releases/latest" 2>/dev/null | \
             grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
             grep -o '"[^"]*"$' | tr -d '"v') || true
     fi
@@ -86,7 +86,7 @@ download() {
 main() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║     OpenClaw 一键安装 by 晴辰云     ║${NC}"
+    echo -e "${CYAN}║     OpenClaw 一键安装 by Coocare     ║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
     echo ""
 
@@ -183,8 +183,7 @@ main() {
     echo "    openclaw setup         # 初始化配置"
     echo "    openclaw gateway       # 启动 Gateway"
     echo ""
-    echo -e "  图形管理面板: ${CYAN}https://github.com/qingchencloud/clawpanel${NC}"
-    echo -e "  AI 接口服务:  ${CYAN}https://gpt.qt.cool${NC}"
+    echo -e "  图形管理面板: ${CYAN}https://github.com/bddiudiu/clawpanel${NC}"
     echo ""
 }
 

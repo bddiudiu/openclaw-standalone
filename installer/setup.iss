@@ -20,7 +20,7 @@
 
 [Setup]
 AppId={{A7E3F2B1-9C4D-4E5F-B6A8-1D2E3F4A5B6C}
-AppName=OpenClaw
+AppName=战Claw
 AppVersion={#AppVersion}
 AppVerName=OpenClaw {#AppVersion}
 AppPublisher=Coocare Tech (Coocare Tech)
@@ -43,20 +43,20 @@ ChangesEnvironment=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\openclaw.cmd
-VersionInfoCompany=QingChenCloud
-VersionInfoDescription=OpenClaw - AI 智能体引擎
-VersionInfoProductName=OpenClaw
+VersionInfoCompany=Coocare Tech
+VersionInfoDescription=战Claw - AI 智能体引擎
+VersionInfoProductName=战Claw
 MinVersion=10.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-BeveledLabel=QingChenCloud · OpenClaw Setup
+BeveledLabel=Coocare Tech · 战Claw Setup
 
 [CustomMessages]
 AddToPath=Add OpenClaw to PATH (recommended)
-FinishMessage=OpenClaw installed!%n%nOpen a terminal and type openclaw to get started.%n%nGUI panel: https://github.com/qingchencloud/clawpanel
+FinishMessage=OpenClaw installed!%n%nOpen a terminal and type openclaw to get started.%n%nGUI panel: https://github.com/bddiudiu/clawpanel
 
 [Tasks]
 Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "Configuration:"; Flags: checkedonce
