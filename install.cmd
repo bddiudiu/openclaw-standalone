@@ -13,12 +13,21 @@ echo ╚════════════════════════
 echo.
 
 set "INSTALL_DIR=%LOCALAPPDATA%\OpenClaw"
-set "DOWNLOAD_BASE=https://plugins.coocare.com/openclaw-standalone"
+if defined OPENCLAW_DOWNLOAD_BASE (
+    set "DOWNLOAD_BASE=%OPENCLAW_DOWNLOAD_BASE%"
+) else (
+    if defined ALIYUN_OSS_PUBLIC_BASE_URL (
+        set "DOWNLOAD_BASE=%ALIYUN_OSS_PUBLIC_BASE_URL%"
+    ) else (
+        set "DOWNLOAD_BASE=https://dl.qrj.ai/openclaw-standalone"
+    )
+)
+if "%DOWNLOAD_BASE:~-1%"=="/" set "DOWNLOAD_BASE=%DOWNLOAD_BASE:~0,-1%"
 set "PLATFORM=win-x64"
 
 :: --- Get latest version ---
 echo [INFO] 获取最新版本...
-for /f "delims=" %%v in ('powershell -NoProfile -Command "(Invoke-RestMethod -Uri '%DOWNLOAD_BASE%/latest.json' -TimeoutSec 5).version" 2^>nul') do set "VERSION=%%v"
+for /f "delims=" %%v in ('powershell -NoProfile -Command "$m = Invoke-RestMethod -Uri ''%DOWNLOAD_BASE%/latest.json'' -TimeoutSec 5; if ($m.version) { $m.version } elseif ($m.editions.en.version) { $m.editions.en.version }" 2^>nul') do set "VERSION=%%v"
 
 if "%VERSION%"=="" (
     echo [WARN] 主下载源获取失败，尝试 GitHub...

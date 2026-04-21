@@ -7,7 +7,8 @@ set -euo pipefail
 
 # --- Configuration ---
 INSTALL_DIR="${OPENCLAW_HOME:-$HOME/.openclaw-bin}"
-DOWNLOAD_BASE="https://plugins.coocare.com/openclaw-standalone"
+DOWNLOAD_BASE="${OPENCLAW_DOWNLOAD_BASE:-${ALIYUN_OSS_PUBLIC_BASE_URL:-https://dl.qrj.ai/openclaw-standalone}}"
+DOWNLOAD_BASE="${DOWNLOAD_BASE%/}"
 GITHUB_BASE="https://github.com/bddiudiu/openclaw-standalone"
 
 # --- Colors ---
